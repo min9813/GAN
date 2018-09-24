@@ -1,0 +1,8 @@
+*.ipynb
+*.png
+*.csv
+*.jpeg
+*.jpg
+__pycache__/
+.ipynb_checkpoints/
+gan_image/
