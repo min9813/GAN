@@ -6,4 +6,5 @@
 __pycache__/
 .ipynb_checkpoints/
 gan_image/
-ｄｃgan*/
+dcgan_mnist/
+dcgan_cifar/
