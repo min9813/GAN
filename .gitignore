@@ -7,4 +7,7 @@ __pycache__/
 .ipynb_checkpoints/
 gan_image/
 dcgan_mnist/
+preview/
+*.npz
+!/sample_image
 dcgan_cifar/
