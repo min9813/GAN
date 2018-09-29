@@ -9,5 +9,6 @@ gan_image/
 dcgan_mnist/
 preview/
 *.npz
-!/sample_image
+!/sample_image/mnist/*.png
+!/sample_image/cifar/*.png
 dcgan_cifar/
