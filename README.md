@@ -11,4 +11,6 @@
 - 損失関数はsigmoid, softmax, softplusどれにしてもあまり変わらなかった。
 - Image fromarray や plt.imshow は (高さ, 幅, チャンネル)の順にしないといけない。
 
-- ![Cifar epoch1](https://github.com/min9813/GAN/blob/master/sample_image/cifar/image_epoch_0001.png)
+
+#### Cifar epoch100
+![Cifar epoch1](https://github.com/min9813/GAN/blob/master/sample_image/cifar/image_epoch_0100.png)
