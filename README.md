@@ -30,7 +30,7 @@
 と書いてあったが、
 [実装](https://github.com/igul222/improved_wgan_training) では
 <div style="text-align: center;">
-<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0.5, \beta_2=0.9$" />
+<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0.5,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0.5, \beta_2=0.9$" />
 </div>
 となっていた。気をつけるべし。
 
