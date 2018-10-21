@@ -23,11 +23,15 @@
   - それとも収束が遅いことが原因？
 
 ##### WGANGPについて
-- [論文](https://arxiv.org/abs/1704.00028)には  
+- [論文](https://arxiv.org/abs/1704.00028)には
+<div style="text-align: center;">
 <img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0, \beta_2=0.9$" />  
+</div>
 と書いてあったが、
-[実装](https://github.com/igul222/improved_wgan_training)では  
-<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0.5, \beta_2=0.9$" />  
+[実装](https://github.com/igul222/improved_wgan_training) では
+<div style="text-align: center;">
+<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0.5, \beta_2=0.9$" />
+</div>
 となっていた。気をつけるべし。
 
 - 収束が遅いのと、Cifarに対しては謎にwesserstein 距離が大きくなたりする。
