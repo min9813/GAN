@@ -110,8 +110,6 @@ def train(gen,
                                 optimizer={"gen": opt_gen, "critic": opt_dis},
                                 step=step,
                                 gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT,
-                                diter_change_iteration=150,
-                                flag_change_iter=True,
                                 device=0)
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report + ["critic/loss_grad"]
