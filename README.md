@@ -23,7 +23,15 @@
   - それとも収束が遅いことが原因？
 
 ##### WGANGPについて
+- 論文には<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0, \beta_2=0.9$" /> と書いてあったが、実装では
+<img src="https://latex.codecogs.com/gif.latex?$\alpha=0.0001,&space;\beta_1=0,&space;\beta_2=0.9$" title="$\alpha=0.0001, \beta_1=0.5, \beta_2=0.9$" />となっていた。気をつけるべし。 
+
 - 収束が遅いのと、Cifarに対しては謎にwesserstein 距離が大きくなたりする。
+- エポックが200超えたらcriticとgeneratorを1:1で学習させたが無意味であった。
+
+
+##### まとめ
+- 今のところDCGANが一番きれい。エポック数が最大300と低いのが原因？
 
 ##### Cifar epoch100
 ![Cifar epoch1](https://github.com/min9813/GAN/blob/master/sample_image/cifar/image_epoch_0100.png)

@@ -103,8 +103,8 @@ def train(gen,
         print_report = plot_report
 
     elif method == "WGANGP":
-        opt_gen = make_optimizer(gen, alpha=0.0001, beta1=0, beta2=0.9)
-        opt_dis = make_optimizer(dis, alpha=0.0001, beta1=0, beta2=0.9)
+        opt_gen = make_optimizer(gen, alpha=0.0001, beta1=0.5, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0001, beta1=0.5, beta2=0.9)
         updater = WGANGPUpdater(models=(gen, dis),
                                 iterator=train_iter,
                                 optimizer={"gen": opt_gen, "critic": opt_dis},
