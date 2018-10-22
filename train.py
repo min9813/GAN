@@ -9,7 +9,7 @@ from chainer.datasets import cifar
 from draw import out_generated_image, gaussian_mixture_circle
 from legacy import check_and_make_dir
 from updater import WGANUpdater, DCGANUpdater, WGANGPUpdater
-from model import Generator, CifarGenerator, Discriminator, CifarDiscriminator, WeightClipping
+from model import Generator, CifarGenerator, Discriminator, CifarDiscriminator, WGANDiscriminator, WeightClipping
 import argparse
 import sys
 import os
@@ -29,7 +29,7 @@ def train(gen,
           epoch_intervel=(1, "epoch"),
           dispplay_interval=(100, "iteration"),
           out_folder="./wgan_mnist/",
-          max_epoch=100,
+          max_time=(1, "epoch"),
           out_image_edge_num=100,
           method="WGAN"):
 
@@ -37,7 +37,7 @@ def train(gen,
     new_folder = "folder_{}".format(len(os.listdir(out_folder)))
     out_folder = os.path.join(out_folder, new_folder)
     if debug:
-        max_epoch = 5
+        max_time = (3, "epoch")
     # Make a specified GPU current
     gen.to_gpu()  # Copy the model to the GPU
     dis.to_gpu()
@@ -45,11 +45,14 @@ def train(gen,
     if data_set == "cifar":
         # ndim=3 : (ch,width,height)
         train, _ = cifar.get_cifar10(withlabel=False, ndim=3, scale=1.)
+        train = train * 2 - 1
         train_iter = chainer.iterators.SerialIterator(train, batch_size)
     elif data_set == "mnist":
         # Load the MNIST dataset
+        # ndim=3 : (ch,width,height)
         train, _ = chainer.datasets.get_mnist(
-            withlabel=False, ndim=3, scale=1.)  # ndim=3 : (ch,width,height)
+            withlabel=False, ndim=3, scale=1.)
+        train = train * 2 - 1
         train_iter = chainer.iterators.SerialIterator(train, batch_size)
     elif data_set == "toy":
         train = gaussian_mixture_circle(60000, std=0.1)
@@ -112,11 +115,10 @@ def train(gen,
                                 gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT,
                                 device=0)
         plot_report = ["gen/loss", 'wasserstein distance']
-        print_report = plot_report + ["critic/loss_grad"]
+        print_report = plot_report + ["critic/loss_grad", "critic/loss"]
 
     # Set up a trainer
-    trainer = training.Trainer(updater, stop_trigger=(
-        max_epoch, 'epoch'), out=out_folder)
+    trainer = training.Trainer(updater, stop_trigger=max_time, out=out_folder)
 
     epoch_interval = (1, 'epoch')
     display_interval = (100, 'iteration')
@@ -130,12 +132,13 @@ def train(gen,
         trainer.extend(extensions.snapshot_object(
             dis, 'dis_epoch_{.updater.epoch}.npz'), trigger=epoch_interval)
     trainer.extend(extensions.PlotReport(
-        plot_report, x_key='iteration', file_name='loss.png', trigger=epoch_intervel))
+        plot_report, x_key='iteration', file_name='loss.png', trigger=display_interval))
     trainer.extend(extensions.LogReport(trigger=display_interval))
     trainer.extend(extensions.PrintReport(
-        ['epoch', 'iteration', 'elapsed_time'] + print_report), trigger=display_interval)
-    trainer.extend(out_generated_image(gen, dis, out_image_edge_num, out_image_edge_num,
-                                       0, out_folder), trigger=epoch_interval)
+        ['iteration', 'elapsed_time'] + print_report), trigger=epoch_interval)
+    trainer.extend(out_generated_image(gen, out_image_edge_num, out_image_edge_num,
+                                       0, out_folder), trigger=(200, "iteration"))
+    trainer.extend(extensions.ProgressBar(update_interval=10))
 
     # Run the training
     trainer.run()
@@ -152,9 +155,11 @@ parser.add_argument("-d", "--dataset",
                     type=str,
                     default="mnist")
 parser.add_argument("-b", "--batchsize",
-                    help="batch size", type=int, default=128)
+                    help="batch size", type=int, default=64)
 parser.add_argument("-me", "--max_epoch",
                     help="max epoch time", type=int, default=100)
+parser.add_argument("-mi", "--max_iteration",
+                    help="max iteration time", type=int, default=100)
 parser.add_argument("-f", "--output_dir_name",
                     help="file to output the training data", type=str, default="TEST")
 parser.add_argument("-l", "--latent_dim",
@@ -178,8 +183,15 @@ def main():
         discriminator = Discriminator()
 
     else:
+        if args.method == "WGANGP":
+            discriminator = WGANDiscriminator()
+        else:
+            discriminator = CifarDiscriminator()
         generator = CifarGenerator(args.latent_dim)
-        discriminator = CifarDiscriminator()
+    if args.max_epoch == 100:
+        stopper = (args.max_iteration, "iteration")
+    else:
+        stopper = (args.max_epoch, "epoch")
     check_and_make_dir(out_path)
 
     chainer.using_config("autotune", True)
@@ -192,7 +204,7 @@ def main():
           debug=(args.no_debug is False),
           n_hidden=args.latent_dim,
           out_folder=out_path,
-          max_epoch=args.max_epoch,
+          max_time=stopper,
           out_image_edge_num=int(math.sqrt(args.out_image_num)),
           method=args.method)
 

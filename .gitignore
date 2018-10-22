@@ -12,6 +12,6 @@ wgan*/
 toy/
 !/sample_image/mnist/*.png
 !/sample_image/cifar/*.png
-dcgan_cifar/
+chainer-gan-lib/
 
 DCGAN.py

@@ -6,6 +6,9 @@
 - train.pyに-m引数で使うGANの種類を選べます。
 - 現在使えるGANはDCGAN、WGAN、WGANGPです。
 
+##### 全体的な気づき
+- データは-1~1にリスケールさせる。これでハマった。
+
 ##### DCGANについて
 - deconvolution は stride分各マス目間に０を埋める
 - discriminatorの出力層をglobal average pooling にするとdiscriminatorの識別力が弱くて学習がうまく行かない
@@ -31,7 +34,9 @@
 となっていた。気をつけるべし。
 
 - 収束が遅いのと、Cifarに対しては謎にwesserstein 距離が大きくなたりする。
+  - 冒頭にも述べたように出力がF.tanhなのにデータのスケールが0~1になっていたことが原因
 - エポックが200超えたらcriticとgeneratorを1:1で学習させたが無意味であった。
+- F.sumで頑張って書くよりも、F.batch_l2_norm_squared使うほうが早い
 
 
 ##### まとめ

@@ -4,12 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import seaborn as sns
+# import sys
 from chainer.backends import cuda
+# from chainer import Variable
 from PIL import Image
 
 
-def out_generated_image(gen, dis, rows, cols, seed, dst, from_gaussian=False):
-    @chainer.training.make_extension(trigger=(1, 'epoch'))
+def out_generated_image(gen, rows, cols, seed, dst, from_gaussian=False):
+    @chainer.training.make_extension()
     def make_image(trainer):
         n_images = rows * cols
         xp = gen.xp
@@ -24,7 +26,7 @@ def out_generated_image(gen, dis, rows, cols, seed, dst, from_gaussian=False):
         preview_dir = '{}/preview'.format(dst)
 
         def save_figure(x, file_name="image"):
-            file_name += "_epoch:{}.png".format(trainer.updater.epoch)
+            file_name += "_iteration:{}.png".format(trainer.updater.iteration)
             preview_path = os.path.join(preview_dir, file_name)
             _, C, H, W = x.shape
             x = x.reshape((rows, cols, C, H, W))
@@ -49,9 +51,6 @@ def out_generated_image(gen, dis, rows, cols, seed, dst, from_gaussian=False):
                 trainer.updater.epoch)
             plot_kde(x, directory=preview_dir, filename=preview_filename)
         else:
-            # gen_output_activation_func is sigmoid (0 ~ 1)
-            x_ = np.asarray(np.clip(x * 255, 0.0, 255.0), dtype=np.uint8)
-            save_figure(x_, file_name="clip")
             # gen output_activation_func is tanh (-1 ~ 1)
             x_ = np.asarray((x * 0.5 + 0.5) * 255.0, dtype=np.uint8)
             save_figure(x_, file_name="no_clip")
