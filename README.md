@@ -55,5 +55,6 @@
 ##### まとめ
 - 今のところDCGANが一番きれい。エポック数が最大300と低いのが原因？
 
-##### Cifar epoch100
-![Cifar epoch1](https://github.com/min9813/GAN/blob/master/sample_image/cifar/image_epoch_0100.png)
+##### generated images
+![cifar CGAN iteration 100000 by wgangp](https://github.com/min9813/GAN/blob/master/sample_image/cgan_cifar/image_iteration:100000.png)
+![mnist CGAN iteration 100000 by dcgan](https://github.com/min9813/GAN/blob/master/sample_image/cgan_mnist/mnist_cgan.gif)
