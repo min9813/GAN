@@ -14,5 +14,6 @@ chainer-gan-lib/
 cgan*/
 *.sh
 !/sample_image/
+!/sample_image/cgan*
 
 DCGAN.py
