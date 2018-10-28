@@ -10,8 +10,10 @@ dcgan_mnist/
 dcgan*/
 wgan*/
 toy/
-!/sample_image/mnist/*.png
-!/sample_image/cifar/*.png
+!/sample_image/
+!/sample_image/
 chainer-gan-lib/
+cgan*/
+*.sh
 
 DCGAN.py

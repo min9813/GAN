@@ -10,50 +10,42 @@ from chainer.backends import cuda
 from PIL import Image
 
 
-def out_generated_image(gen, rows, cols, seed, dst, from_gaussian=False):
+def out_generated_image(gen, rows, cols, dst, fixed_noise, seed=0, from_gaussian=False):
     @chainer.training.make_extension()
     def make_image(trainer):
-        n_images = rows * cols
-        xp = gen.xp
-        xp.random.seed(seed)
-        z = chainer.Variable(xp.asarray(gen.make_hidden(n_images)))
 
-        with chainer.using_config('train', False):
-            x = gen(z)
+        with chainer.using_config('train', False), chainer.using_config('enable_backprop', False):
+            x = gen(fixed_noise)
         x = cuda.to_cpu(x.data)
-        np.random.seed(seed)
-
-        preview_dir = '{}/preview'.format(dst)
+        # np.random.seed()
 
         def save_figure(x, file_name="image"):
-            file_name += "_iteration:{}.png".format(trainer.updater.iteration)
-            preview_path = os.path.join(preview_dir, file_name)
+            file_name += "_iteration:{:0>6}.png".format(trainer.updater.iteration)
+            preview_path = os.path.join(dst, file_name)
             _, C, H, W = x.shape
             x = x.reshape((rows, cols, C, H, W))
-            x = x.transpose(0, 3, 1, 4, 2)
+            x = x.transpose(1, 3, 0, 4, 2)
             x = x.reshape((rows * H, cols * W, C))
             if x.shape[2] == 1:
                 Image.fromarray(x[:, :, 0]).save(preview_path)
             else:
                 Image.fromarray(x).save(preview_path)
-        if not os.path.exists(preview_dir):
-            os.makedirs(preview_dir)
         if from_gaussian:
             if trainer.updater.epoch == 1:
                 true_x = gaussian_mixture_circle(1000, std=0.1)
-                plot_scatter(true_x, directory=preview_dir,
+                plot_scatter(true_x, directory=dst,
                              filename="true_scatter")
-                plot_kde(true_x, directory=preview_dir, filename="true_kde")
+                plot_kde(true_x, directory=dst, filename="true_kde")
             preview_filename = 'scatter_epoch_{:0>4}.png'.format(
                 trainer.updater.epoch)
-            plot_scatter(x, directory=preview_dir, filename=preview_filename)
+            plot_scatter(x, directory=dst, filename=preview_filename)
             preview_filename = 'kde_epoch_{:0>4}.png'.format(
                 trainer.updater.epoch)
-            plot_kde(x, directory=preview_dir, filename=preview_filename)
+            plot_kde(x, directory=dst, filename=preview_filename)
         else:
             # gen output_activation_func is tanh (-1 ~ 1)
             x_ = np.asarray((x * 0.5 + 0.5) * 255.0, dtype=np.uint8)
-            save_figure(x_, file_name="no_clip")
+            save_figure(x_, file_name="image")
 
     return make_image
 

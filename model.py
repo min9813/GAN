@@ -5,7 +5,6 @@ import chainer
 from chainer import Chain
 import chainer.functions as F
 import chainer.links as L
-# import numpy as np
 
 
 class Generator(Chain):
@@ -16,19 +15,23 @@ class Generator(Chain):
         self.bottom_width = bottom_width
         super(Generator, self).__init__()
         with self.init_scope():
-            self.z2l = L.Linear(None, 7 * 7 * 256, initialW=w)
+            self.z2l = L.Linear(None, 4 * 4 * 512, initialW=w)
+            self.bn1 = L.BatchNormalization(512)
+            self.deconv1 = L.Deconvolution2D(
+                512, 256, ksize=4, stride=2, pad=1, outsize=(8, 8), initialW=w)
             self.bn2 = L.BatchNormalization(256)
             self.deconv2 = L.Deconvolution2D(
-                256, 128, ksize=3, stride=2, outsize=(14, 14), initialW=w)
+                256, 128, ksize=4, stride=2, pad=2, outsize=(14, 14), initialW=w)
             self.bn3 = L.BatchNormalization(128)
             self.deconv3 = L.Deconvolution2D(
-                128, 1, ksize=3, stride=2, outsize=(28, 28), initialW=w)
+                128, 1, ksize=4, stride=2, pad=1, outsize=(28, 28), initialW=w)
 
     def make_hidden(self, batchsize):
-        return self.xp.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)).astype(self.xp.float32)
+        return self.xp.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)).astype("f")
 
     def __call__(self, x):
-        h = F.reshape(F.relu(self.z2l(x)), (-1, 256, 7, 7))
+        h = F.reshape(F.relu(self.z2l(x)), (x.shape[0], 512, 4, 4))
+        h = F.relu(self.deconv1(self.bn1(h)))
         h = F.relu(self.deconv2(self.bn2(h)))
         h = self.deconv3(self.bn3(h))
         return F.tanh(h)
@@ -37,23 +40,29 @@ class Generator(Chain):
 class Discriminator(Chain):
 
     def __init__(self):
+        # self.in_channel = in_channel
         w = chainer.initializers.Normal(scale=0.02)
         super(Discriminator, self).__init__()
         with self.init_scope():
             # 28
             self.conv1 = L.Convolution2D(
-                1, 128, ksize=4, stride=2, pad=0, initialW=w)
+                None, 128, ksize=4, stride=2, pad=1, initialW=w)
             # 14
             self.conv2 = L.Convolution2D(
-                128, 256, ksize=4, stride=2, pad=1, initialW=w)
-            # 7
-            self.lout = L.Linear(None, 1, initialW=w)
+                128, 256, ksize=4, stride=2, pad=2, initialW=w)
+            # 8
+            self.conv3 = L.Convolution2D(
+                256, 512, ksize=4, stride=2, pad=1, initialW=w)
+            # 4
+            self.lout = L.Linear(4*4*512, 1, initialW=w)
             self.bn1 = L.BatchNormalization(128)
             self.bn2 = L.BatchNormalization(256)
+            self.bn3 = L.BatchNormalization(512)
 
     def __call__(self, x):
         h = F.leaky_relu(self.bn1(self.conv1(x)), slope=0.2)
-        h = self.conv2(h)
+        h = F.leaky_relu(self.bn2(self.conv2(h)), slope=0.2)
+        h = F.leaky_relu(self.bn3(self.conv3(h)), slope=0.2)
         h = F.reshape(h, (x.shape[0], -1))
 
         return self.lout(h)
@@ -62,16 +71,15 @@ class Discriminator(Chain):
 class CifarGenerator(Chain):
 
     def __init__(self, n_hidden, wscale=0.02, ch=512, bottom_width=4):
-        w = chainer.initializers.Normal(scale=wscale)
+        super(CifarGenerator, self).__init__()
         self.n_hidden = n_hidden
         self.output_activation = F.tanh
         self.hidden_activation = F.relu
         self.ch = ch
         self.bottom_width = bottom_width
-        super(CifarGenerator, self).__init__()
         with self.init_scope():
-            w = chainer.initializers.Normal(wscale)
-            self.l0 = L.Linear(self.n_hidden, bottom_width * bottom_width * ch,
+            w = chainer.initializers.Normal(scale=wscale)
+            self.l0 = L.Linear(None, bottom_width * bottom_width * ch,
                                initialW=w)
             self.dc1 = L.Deconvolution2D(ch, ch // 2, 4, 2, 1, initialW=w)
             self.dc2 = L.Deconvolution2D(ch // 2, ch // 4, 4, 2, 1, initialW=w)
@@ -85,6 +93,8 @@ class CifarGenerator(Chain):
 
     def make_hidden(self, batchsize):
         return self.xp.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)).astype(self.xp.float32)
+        # return np.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)) \
+        # .astype(np.float32)
 
     def __call__(self, z):
         h = F.reshape(self.hidden_activation(self.bn0(self.l0(z))),
@@ -138,7 +148,7 @@ class WGANDiscriminator(chainer.Chain):
         w = chainer.initializers.Normal(wscale)
         super(WGANDiscriminator, self).__init__()
         with self.init_scope():
-            self.c0 = L.Convolution2D(3, ch // 8, 3, 1, 1, initialW=w)
+            self.c0 = L.Convolution2D(None, ch // 8, 3, 1, 1, initialW=w)
             self.c1 = L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w)
             self.c1_0 = L.Convolution2D(ch // 4, ch // 4, 3, 1, 1, initialW=w)
             self.c2 = L.Convolution2D(ch // 4, ch // 2, 4, 2, 1, initialW=w)
@@ -149,15 +159,15 @@ class WGANDiscriminator(chainer.Chain):
                                ch, output_dim, initialW=w)
 
     def __call__(self, x):
-        self.x = x
-        self.h = F.leaky_relu(self.c0(self.x))
-        self.h = F.leaky_relu(self.c1(self.h))
-        self.h = F.leaky_relu(self.c1_0(self.h))
-        self.h = F.leaky_relu(self.c2(self.h))
-        self.h = F.leaky_relu(self.c2_0(self.h))
-        self.h = F.leaky_relu(self.c3(self.h))
-        self.h = F.leaky_relu(self.c3_0(self.h))
-        return self.l4(self.h)
+        h = F.leaky_relu(self.c0(x))
+        h = F.leaky_relu(self.c1(h))
+        h = F.leaky_relu(self.c1_0(h))
+        h = F.leaky_relu(self.c2(h))
+        h = F.leaky_relu(self.c2_0(h))
+        h = F.leaky_relu(self.c3(h))
+        h = F.leaky_relu(self.c3_0(h))
+        return self.l4(h)
+
 
 
 class FCGenerator(Chain):
