@@ -6,16 +6,14 @@ import math
 from chainer import training
 from chainer.training import extensions
 from chainer.datasets import cifar
-from draw import out_generated_image, gaussian_mixture_circle
-from legacy import check_and_make_dir
-from updater import WGANUpdater, DCGANUpdater, WGANGPUpdater, CGANDCGANUpdater, CGANWGANGPUpdater
-from model import Generator, CifarGenerator, Discriminator, CifarDiscriminator, WGANDiscriminator, WeightClipping
+from common.utils import WeightClipping, check_and_make_dir
+from common.draw import out_generated_image, gaussian_mixture_circle
+from common import net
 import argparse
 import sys
 import os
 import cupy
 import time
-import numpy as np
 
 
 GRADIENT_PENALTY_WEIGHT = 10
@@ -45,6 +43,11 @@ def train(gen,
     # Make a specified GPU current
     gen.to_gpu()  # Copy the model to the GPU
     dis.to_gpu()
+
+    models = {"gen": gen, "dis": dis}
+    updater_args = {"n_dis": step,
+                    "gradient_penalty_weight": GRADIENT_PENALTY_WEIGHT,
+                    "device": 0}
 
     if data_set == "cifar":
         print("use cifar dataset")
@@ -94,28 +97,18 @@ def train(gen,
                 optimizer.add_hook(WeightClipping(params["clip"]))
             except KeyError:
                 pass
-        elif method == "wgangp":
+        elif method == "wgangp" or method == "cramer":
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"], beta2=params["beta2"])
             optimizer.setup(model)
+        else:
+            raise NotImplementedError
 
         return optimizer
 
     if method == "dcgan":
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0.5)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0.5)
-        if is_cgan:
-            updater = CGANDCGANUpdater(models=(gen, dis),
-                                       iterator=train_iter,
-                                       optimizer={
-                                           "gen": opt_gen, "dis": opt_dis},
-                                       class_num=label_num,
-                                       device=0)
-        else:
-            updater = DCGANUpdater(models=(gen, dis),
-                                   iterator=train_iter,
-                                   optimizer={"gen": opt_gen, "dis": opt_dis},
-                                   device=0)
 
         plot_report = ["gen/loss", "dis/loss"]
         print_report = plot_report
@@ -123,54 +116,50 @@ def train(gen,
     elif method == "wgan":
         opt_gen = make_optimizer(gen, lr=5e-5)
         opt_dis = make_optimizer(dis, lr=5e-5, clip=0.01)
-        updater = WGANUpdater(models=(gen, dis),
-                              iterator=train_iter,
-                              optimizer={"gen": opt_gen, "critic": opt_dis},
-                              step=step,
-                              device=0)
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report
 
     elif method == "wgangp":
+        from wgangp.updater import Updater, CGANUpdater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
-        if is_cgan:
-            updater = CGANWGANGPUpdater(models=(gen, dis),
-                                        iterator=train_iter,
-                                        optimizer={"gen": opt_gen,
-                                                   "critic": opt_dis},
-                                        step=step,
-                                        class_num=label_num,
-                                        gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT,
-                                        device=0)
-        else:
-            updater = WGANGPUpdater(models=(gen, dis),
-                                    iterator=train_iter,
-                                    optimizer={"gen": opt_gen,
-                                               "critic": opt_dis},
-                                    step=step,
-                                    gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT,
-                                    device=0)
+
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
+    elif method == "cramer":
+        from cramer.updater import Updater, CGANUpdater
+        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
 
-        # Set up a trainer
-    trainer = training.Trainer(updater, stop_trigger=max_time, out=out_folder)
+        plot_report = ["gen/loss", 'cramer distance']
+        print_report = plot_report + ["critic/loss_grad", "critic/loss"]
+    else:
+        raise NotImplementedError
 
-    # epoch_interval = (1, 'epoch')
-    save_snapshot_interval = (10000, "iteration")
-    display_interval = (100, 'iteration')
-
+    opt = {"gen": opt_gen, "dis": opt_dis}
+    updater_args["optimizer"] = opt
+    updater_args["models"] = models
+    updater_args["iterator"] = train_iter
     fixed_noise = cupy.random.uniform(-1, 1,
                                       (out_image_edge_num**2, n_hidden, 1, 1)).astype("f")
-
     if is_cgan:
+        updater_args["class_num"] = label_num
+        updater = CGANUpdater(**updater_args)
         one_hot_label = cupy.eye(label_num)[
             cupy.arange(label_num)][:, :, None, None]
         one_hot_label = cupy.concatenate([one_hot_label] * 10)
         fixed_noise = cupy.concatenate(
             [fixed_noise, one_hot_label], axis=1).astype("f")
         print(fixed_noise.shape)
+
+    else:
+        updater = Updater(**updater_args)
+        # Set up a trainer
+    trainer = training.Trainer(updater, stop_trigger=max_time, out=out_folder)
+
+    # epoch_interval = (1, 'epoch')
+    save_snapshot_interval = (10000, "iteration")
+    display_interval = (100, 'iteration')
 
     out_image_folder = os.path.join(out_folder, "preview")
     check_and_make_dir(out_image_folder)
@@ -197,7 +186,7 @@ def train(gen,
 
 
 DATASET_LIST = ["mnist", "cifar"]
-GAN_LIST = ["wgangp", "wgan", "dcgan"]
+GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer"]
 
 parser = argparse.ArgumentParser(
     description="This file is used to train model")
@@ -237,19 +226,21 @@ def main():
     else:
         folder_name = args.method + "_" + args.dataset
 
-    out_path = os.path.join(folder_name,
+    out_path = os.path.join("result", folder_name,
                             "z_dim_{}".format(args.latent_dim))
 
     if args.dataset == "mnist":
-        generator = Generator(args.latent_dim)
-        discriminator = Discriminator()
+        generator = net.Generator(args.latent_dim)
+        discriminator = net.Discriminator()
 
     else:
         if args.method == "wgangp":
-            discriminator = WGANDiscriminator()
+            discriminator = net.WGANDiscriminator()
+        elif args.method=="cramer":
+            discriminator = net.WGANDiscriminator(output_dim=256)
         else:
-            discriminator = CifarDiscriminator()
-        generator = CifarGenerator(args.latent_dim)
+            discriminator = net.CifarDiscriminator()
+        generator = net.CifarGenerator(args.latent_dim)
         print("latent variable's dim = {}".format(args.latent_dim))
     if args.max_epoch == 100:
         stopper = (args.max_iteration, "iteration")
