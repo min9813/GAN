@@ -5,10 +5,10 @@ import chainer
 import math
 from chainer import training
 from chainer.training import extensions
-from chainer.datasets import cifar
 from common.utils import WeightClipping, check_and_make_dir
 from common.draw import out_generated_image, gaussian_mixture_circle
 from common import net
+from common import dataset
 import argparse
 import sys
 import os
@@ -19,9 +19,7 @@ import time
 GRADIENT_PENALTY_WEIGHT = 10
 
 
-def train(gen,
-          dis,
-          step=(5, 100),
+def train(step=(5, 100),
           data_set="cifar",
           debug=True,
           n_hidden=128,
@@ -33,6 +31,7 @@ def train(gen,
           max_time=(1, "epoch"),
           out_image_edge_num=100,
           is_cgan=False,
+          gamma=0.5,
           method="wgangp"):
 
     check_and_make_dir(out_folder)
@@ -41,35 +40,20 @@ def train(gen,
     if debug:
         max_time = (30, "iteration")
     # Make a specified GPU current
-    gen.to_gpu()  # Copy the model to the GPU
-    dis.to_gpu()
 
-    models = {"gen": gen, "dis": dis}
     updater_args = {"n_dis": step,
-                    "gradient_penalty_weight": GRADIENT_PENALTY_WEIGHT,
                     "device": 0}
 
     if data_set == "cifar":
         print("use cifar dataset")
         # ndim=3 : (ch,width,height)
-        if is_cgan:
-            train, _ = cifar.get_cifar10(ndim=3, scale=1.)
-            label_num = 10
-        else:
-            train, _ = cifar.get_cifar10(withlabel=False, ndim=3, scale=1.)
-            train = train * 2 - 1
+        train = dataset.Cifar10Dataset(is_need_conditional=is_cgan)
         train_iter = chainer.iterators.SerialIterator(train, batch_size)
     elif data_set == "mnist":
         print("use mnist dataset")
         # Load the MNIST dataset
         # ndim=3 : (ch,width,height)
-        if is_cgan:
-            train, _ = chainer.datasets.get_mnist(ndim=3, scale=1.0)
-            label_num = 10
-        else:
-            train, _ = chainer.datasets.get_mnist(
-                withlabel=False, ndim=3, scale=1.)
-            train = train * 2 - 1
+        train = dataset.Mnist10Dataset(is_need_conditional=is_cgan)
         train_iter = chainer.iterators.SerialIterator(
             train, batch_size, shuffle=False)
     elif data_set == "toy":
@@ -97,7 +81,7 @@ def train(gen,
                 optimizer.add_hook(WeightClipping(params["clip"]))
             except KeyError:
                 pass
-        elif method == "wgangp" or method == "cramer":
+        elif method in ("wgangp", "began", "cramer"):
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"], beta2=params["beta2"])
             optimizer.setup(model)
@@ -107,6 +91,16 @@ def train(gen,
         return optimizer
 
     if method == "dcgan":
+        if data_set == "mnist":
+            gen = net.Generator(n_hidden)
+            dis = net.Discriminator()
+        elif data_set == 'cifar':
+            gen = net.CifarGenerator(n_hidden)
+            dis = net.CifarDiscriminator()
+        else:
+            gen = net.FCGenerator(n_hidden)
+            dis = net.FCDiscriminator()
+        from dcgan.updater import Updater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0.5)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0.5)
 
@@ -114,28 +108,79 @@ def train(gen,
         print_report = plot_report
 
     elif method == "wgan":
+        if data_set == "mnist":
+            gen = net.Generator(n_hidden)
+            dis = net.Discriminator()
+        elif data_set == 'cifar':
+            gen = net.CifarGenerator(n_hidden)
+            dis = net.CifarDiscriminator()
+        else:
+            gen = net.FCGenerator(n_hidden)
+            dis = net.FCDiscriminator()
+        from wgan.updater import Updater
         opt_gen = make_optimizer(gen, lr=5e-5)
         opt_dis = make_optimizer(dis, lr=5e-5, clip=0.01)
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report
 
     elif method == "wgangp":
+        if data_set == "mnist":
+            gen = net.Generator(n_hidden)
+            dis = net.Discriminator()
+        elif data_set == 'cifar':
+            gen = net.CifarGenerator(n_hidden)
+            dis = net.WGANDiscriminator()
+        else:
+            gen = net.FCGenerator(n_hidden)
+            dis = net.FCDiscriminator()
         from wgangp.updater import Updater, CGANUpdater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
 
+        updater_args["gradient_penalty_weight"] = GRADIENT_PENALTY_WEIGHT
+
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
     elif method == "cramer":
+        if data_set == "mnist":
+            gen = net.Generator(n_hidden)
+            dis = net.Discriminator(output_dim=256)
+        elif data_set == 'cifar':
+            gen = net.CifarGenerator(n_hidden)
+            dis = net.WGANDiscriminator(output_dim=256)
+        else:
+            gen = net.FCGenerator(n_hidden)
+            dis = net.FCDiscriminator(output_dim=64)
         from cramer.updater import Updater, CGANUpdater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
 
+        updater_args["gradient_penalty_weight"] = GRADIENT_PENALTY_WEIGHT
+
         plot_report = ["gen/loss", 'cramer distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
+    elif method == "began":
+        from began import net
+        from began.updater import Updater
+        if data_set == "mnist":
+            gen = net.MnistGenerator(n_hidden)
+            dis = net.MnistDiscriminator()
+        elif data_set == 'cifar':
+            gen = net.CifarGenerator(n_hidden)
+            dis = net.CifarDiscriminator()
+        updater_args["gamma"] = gamma
+        updater_args["lambda_k"] = 0.001
+        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
+        plot_report = ["dis/loss", "gen/loss"]
+        print_report = plot_report + ["kt", "measurement"]
     else:
         raise NotImplementedError
 
+    gen.to_gpu()  # Copy the model to the GPU
+    dis.to_gpu()
+
+    models = {"gen": gen, "dis": dis}
     opt = {"gen": opt_gen, "dis": opt_dis}
     updater_args["optimizer"] = opt
     updater_args["models"] = models
@@ -143,6 +188,7 @@ def train(gen,
     fixed_noise = cupy.random.uniform(-1, 1,
                                       (out_image_edge_num**2, n_hidden, 1, 1)).astype("f")
     if is_cgan:
+        label_num = train.class_label_num
         updater_args["class_num"] = label_num
         updater = CGANUpdater(**updater_args)
         one_hot_label = cupy.eye(label_num)[
@@ -174,6 +220,9 @@ def train(gen,
             dis, 'dis_epoch_{.updater.iteration}.npz'), trigger=save_snapshot_interval)
     trainer.extend(extensions.PlotReport(
         plot_report, x_key='iteration', file_name='loss.png', trigger=display_interval))
+    if method == "began":
+        trainer.extend(extensions.PlotReport(
+            ["measurement"], x_key='iteration', file_name='convergence_measure.png', trigger=display_interval))
     trainer.extend(extensions.LogReport(trigger=display_interval))
     trainer.extend(extensions.PrintReport(
         ['iteration', 'elapsed_time'] + print_report), trigger=display_interval)
@@ -186,7 +235,7 @@ def train(gen,
 
 
 DATASET_LIST = ["mnist", "cifar"]
-GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer"]
+GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer", "began"]
 
 parser = argparse.ArgumentParser(
     description="This file is used to train model")
@@ -204,7 +253,7 @@ parser.add_argument("-mi", "--max_iteration",
 parser.add_argument("-f", "--output_dir_name",
                     help="file to output the training data", type=str, default="TEST")
 parser.add_argument("-l", "--latent_dim",
-                    help="dimenstion of latent variable", type=int, default=100)
+                    help="dimenstion of latent variable", type=int, default=128)
 parser.add_argument("-m", "--method",
                     help="method to create image", choices=GAN_LIST, default="wgangp")
 parser.add_argument("-ndb", "--no_debug",
@@ -215,43 +264,36 @@ parser.add_argument(
     "--cgan", help="falg to use conditional information", action="store_true")
 parser.add_argument(
     "--snapshot", help="falg to save snapshot", action="store_true")
+parser.add_argument("-g", "--gamma",
+                    help="ratio of discriminator's output of fake image and real image, used in began to control balanced learning between two nets.",
+                    type=float,
+                    default=0.5)
 args = parser.parse_args()
 
 
 def main():
     start = time.time()
-    print("use {} to generate image".format(args.method))
     if args.cgan:
         folder_name = "cgan_" + args.method + "_" + args.dataset
+        print("use {} to generate conditional image".format(args.method))
     else:
         folder_name = args.method + "_" + args.dataset
+        print("use {} to generate image".format(args.method))
 
     out_path = os.path.join("result", folder_name,
                             "z_dim_{}".format(args.latent_dim))
-
-    if args.dataset == "mnist":
-        generator = net.Generator(args.latent_dim)
-        discriminator = net.Discriminator()
-
-    else:
-        if args.method == "wgangp":
-            discriminator = net.WGANDiscriminator()
-        elif args.method=="cramer":
-            discriminator = net.WGANDiscriminator(output_dim=256)
-        else:
-            discriminator = net.CifarDiscriminator()
-        generator = net.CifarGenerator(args.latent_dim)
-        print("latent variable's dim = {}".format(args.latent_dim))
+    print("latent variable's dim = {}".format(args.latent_dim))
     if args.max_epoch == 100:
         stopper = (args.max_iteration, "iteration")
     else:
         stopper = (args.max_epoch, "epoch")
 
+    assert args.gamma > 0 and args.gamma < 1, print(
+        "argument 'gamma' must be between [0,1]")
+
     chainer.using_config("autotune", True)
     chainer.using_config("cudnn_deterministic", False)
-    train(gen=generator,
-          dis=discriminator,
-          step=(5, 5),
+    train(step=(5, 5),
           batch_size=args.batchsize,
           data_set=args.dataset,
           debug=(args.no_debug is False),
@@ -261,6 +303,7 @@ def main():
           save_snapshot=args.snapshot,
           out_image_edge_num=int(math.sqrt(args.out_image_num)),
           is_cgan=args.cgan,
+          gamma=args.gamma,
           method=args.method)
 
     end = time.time()

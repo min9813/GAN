@@ -4,7 +4,7 @@
 
 ##### 使い方
 - train.pyに-m引数で使うGANの種類を選べます。
-- 現在使えるGANはDCGAN、WGAN、WGANGP、CGANです。
+- 現在使えるGANはdcgan、wgan、wgan-gp、cramer-gan, be-gan, concidtional-ganです。
 
 ##### 全体的な気づき
 - データは-1~1にリスケールさせる。これでハマった。
@@ -47,6 +47,13 @@
     - 使うほうが過学習はしなくなったが溜まるgradは同じ出し計算結果も同じだし変わらないと思う。
   - image generateのときに設定したseedを戻し忘れてる。
 
+##### Cramer ganについて
+- discriminatorの出力は2次元以上にしないと、backward計算で直交ベクトルが出来上がり、勾配計算がnanとなりうまく行かなくなる
+- backward はnet(x)とcritic(x)の組み合わせなので、critic(x)、net(x)の順にchainer.gradを適用すればよい。(自分でbackward関数作りたくないので)
+
+##### began について
+- discriminatorの中間層（隠れ層）の次元は128がいい。間違えて170としてしまったところ、変な出力となった。
+- あえてAuto-Encoderにするメリットはなんだろう...ebganを見てみるしか？
 
 ##### CGANについて
 - クラスラベルをone-hotの1チャンネルデータに変換している、3チャンネル画像の場合は3チャンネルにすべき？

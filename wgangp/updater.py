@@ -73,7 +73,7 @@ class CGANUpdater(chainer.training.StandardUpdater):
         models = kwargs.pop("models")
         self.gen = models["gen"]
         self.dis = models["dis"]
-        self.n_dis, self.change_step = kwargs.pop("step")
+        self.n_dis, self.change_step = kwargs.pop("n_dis")
         self.lam = kwargs.pop("gradient_penalty_weight")
         self.class_num = kwargs.pop("class_num")
         self.xp = self.gen.xp
@@ -95,7 +95,7 @@ class CGANUpdater(chainer.training.StandardUpdater):
 
     def update_core(self):
         gen_optimizer = self.get_optimizer('gen')
-        dis_optimizer = self.get_optimizer('critic')
+        dis_optimizer = self.get_optimizer('dis')
 
         for i in range(self.n_dis):
             batch = self.get_iterator('main').next()
@@ -103,7 +103,6 @@ class CGANUpdater(chainer.training.StandardUpdater):
 
             x_real, real_label = zip(*batch)
             x_real = self.xp.asarray(x_real).astype("f")
-            x_real = x_real * 2 - 1
 
             one_hot_label, x_real, real_label_image = self.make_label_infomation(
                 real_label, x_real, batchsize)

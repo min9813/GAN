@@ -39,7 +39,7 @@ class Generator(Chain):
 
 class Discriminator(Chain):
 
-    def __init__(self):
+    def __init__(self, output_dim=1):
         # self.in_channel = in_channel
         w = chainer.initializers.Normal(scale=0.02)
         super(Discriminator, self).__init__()
@@ -54,7 +54,7 @@ class Discriminator(Chain):
             self.conv3 = L.Convolution2D(
                 256, 512, ksize=4, stride=2, pad=1, initialW=w)
             # 4
-            self.lout = L.Linear(4 * 4 * 512, 1, initialW=w)
+            self.lout = L.Linear(4 * 4 * 512, output_dim, initialW=w)
             self.bn1 = L.BatchNormalization(128)
             self.bn2 = L.BatchNormalization(256)
             self.bn3 = L.BatchNormalization(512)
