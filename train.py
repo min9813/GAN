@@ -3,17 +3,17 @@
 
 import chainer
 import math
-from chainer import training
-from chainer.training import extensions
-from common.utils import WeightClipping, check_and_make_dir
-from common.draw import out_generated_image, gaussian_mixture_circle
-from common import net
-from common import dataset
 import argparse
 import sys
 import os
 import cupy
 import time
+import common.net
+from chainer import training
+from chainer.training import extensions
+from common.utils import WeightClipping, check_and_make_dir
+from common.draw import out_generated_image, gaussian_mixture_circle
+from common import dataset
 
 
 GRADIENT_PENALTY_WEIGHT = 10
@@ -32,13 +32,15 @@ def train(step=(5, 100),
           out_image_edge_num=100,
           is_cgan=False,
           gamma=0.5,
-          method="wgangp"):
+          perturb_weight=0.5,
+          method="wgangp",
+          techniques=None):
 
     check_and_make_dir(out_folder)
     new_folder = "folder_{}".format(len(os.listdir(out_folder)))
     out_folder = os.path.join(out_folder, new_folder)
     if debug:
-        max_time = (30, "iteration")
+        max_time = (1000, "iteration")
     # Make a specified GPU current
 
     updater_args = {"n_dis": step,
@@ -67,13 +69,13 @@ def train(step=(5, 100),
 
     # Setup an optimizer
     def make_optimizer(model, **params):
-        if method == "dcgan":
+        if method in ("dcgan"):
             # parametor require 'alpha','beta1','beta2'
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"])
             optimizer.setup(model)
-            optimizer.add_hook(
-                chainer.optimizer.WeightDecay(0.0001), 'hook_dec')
+            # optimizer.add_hook(
+            # chainer.optimizer.WeightDecay(0.0001), 'hook_dec')
         elif method == "wgan":
             optimizer = chainer.optimizers.RMSprop(lr=params["lr"])
             optimizer.setup(model)
@@ -81,7 +83,7 @@ def train(step=(5, 100),
                 optimizer.add_hook(WeightClipping(params["clip"]))
             except KeyError:
                 pass
-        elif method in ("wgangp", "began", "cramer"):
+        elif method in ("wgangp", "began", "cramer", "dragan", "improve_technique"):
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"], beta2=params["beta2"])
             optimizer.setup(model)
@@ -92,14 +94,14 @@ def train(step=(5, 100),
 
     if method == "dcgan":
         if data_set == "mnist":
-            gen = net.Generator(n_hidden)
-            dis = net.Discriminator()
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator()
         elif data_set == 'cifar':
-            gen = net.CifarGenerator(n_hidden)
-            dis = net.CifarDiscriminator()
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.CifarDiscriminator()
         else:
-            gen = net.FCGenerator(n_hidden)
-            dis = net.FCDiscriminator()
+            gen = common.net.FCGenerator(n_hidden)
+            dis = common.net.FCDiscriminator()
         from dcgan.updater import Updater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0.5)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0.5)
@@ -109,14 +111,14 @@ def train(step=(5, 100),
 
     elif method == "wgan":
         if data_set == "mnist":
-            gen = net.Generator(n_hidden)
-            dis = net.Discriminator()
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator()
         elif data_set == 'cifar':
-            gen = net.CifarGenerator(n_hidden)
-            dis = net.CifarDiscriminator()
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.CifarDiscriminator()
         else:
-            gen = net.FCGenerator(n_hidden)
-            dis = net.FCDiscriminator()
+            gen = common.net.FCGenerator(n_hidden)
+            dis = common.net.FCDiscriminator()
         from wgan.updater import Updater
         opt_gen = make_optimizer(gen, lr=5e-5)
         opt_dis = make_optimizer(dis, lr=5e-5, clip=0.01)
@@ -125,14 +127,14 @@ def train(step=(5, 100),
 
     elif method == "wgangp":
         if data_set == "mnist":
-            gen = net.Generator(n_hidden)
-            dis = net.Discriminator()
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator()
         elif data_set == 'cifar':
-            gen = net.CifarGenerator(n_hidden)
-            dis = net.WGANDiscriminator()
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.WGANDiscriminator()
         else:
-            gen = net.FCGenerator(n_hidden)
-            dis = net.FCDiscriminator()
+            gen = common.net.FCGenerator(n_hidden)
+            dis = common.net.FCDiscriminator()
         from wgangp.updater import Updater, CGANUpdater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
@@ -141,16 +143,16 @@ def train(step=(5, 100),
 
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
-    elif method == "cramer":
+    elif method == "wgangp":
         if data_set == "mnist":
-            gen = net.Generator(n_hidden)
-            dis = net.Discriminator(output_dim=256)
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator(output_dim=256)
         elif data_set == 'cifar':
-            gen = net.CifarGenerator(n_hidden)
-            dis = net.WGANDiscriminator(output_dim=256)
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.WGANDiscriminator(output_dim=256)
         else:
-            gen = net.FCGenerator(n_hidden)
-            dis = net.FCDiscriminator(output_dim=64)
+            gen = common.net.FCGenerator(n_hidden)
+            dis = common.net.FCDiscriminator(output_dim=64)
         from cramer.updater import Updater, CGANUpdater
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
@@ -160,20 +162,63 @@ def train(step=(5, 100),
         plot_report = ["gen/loss", 'cramer distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
     elif method == "began":
-        from began import net
+        import began
         from began.updater import Updater
         if data_set == "mnist":
-            gen = net.MnistGenerator(n_hidden)
-            dis = net.MnistDiscriminator()
+            gen = began.net.MnistGenerator(n_hidden)
+            dis = began.net.MnistDiscriminator()
         elif data_set == 'cifar':
-            gen = net.CifarGenerator(n_hidden)
-            dis = net.CifarDiscriminator()
+            gen = began.net.CifarGenerator(n_hidden)
+            dis = began.net.CifarDiscriminator()
         updater_args["gamma"] = gamma
         updater_args["lambda_k"] = 0.001
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
         plot_report = ["dis/loss", "gen/loss"]
         print_report = plot_report + ["kt", "measurement"]
+    elif method == "dragan":
+        from dragan.updater import Updater
+        if data_set == "mnist":
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator()
+        elif data_set == 'cifar':
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.WGANDiscriminator()
+        updater_args["gradient_penalty_weight"] = GRADIENT_PENALTY_WEIGHT
+        updater_args["perturb_weight"] = perturb_weight
+        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
+        plot_report = ["gen/loss", 'dis/loss']
+        print_report = plot_report + ["dis/loss_grad"]
+    elif method == "improve_technique":
+        print("use next technique:")
+        if data_set == "mnist":
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.Discriminator()
+        elif data_set == 'cifar':
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.CifarDiscriminator()
+        else:
+            raise NotImplementedError
+        if techniques["minibatch_discrimination"]:
+            print("**minibatch discrimination**")
+            import improve_technique.net
+            if data_set == "mnist":
+                dis = improve_technique.net.MnistMinibatchDiscriminator()
+            elif data_set == 'cifar':
+                dis = improve_technique.net.CifarDeepMinibatchDiscriminator()
+        if techniques["feature_matching"]:
+            print("**feature matching**")
+            from improved_technique.updater import Updater
+            plot_report = ['dis/loss', "gen/loss", "gen/loss_feature"]
+            print_report = plot_report
+        else:
+            from dcgan.updater import Updater
+            plot_report = ['dis/loss', "gen/loss"]
+            print_report = plot_report
+        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
+
     else:
         raise NotImplementedError
 
@@ -227,7 +272,7 @@ def train(step=(5, 100),
     trainer.extend(extensions.PrintReport(
         ['iteration', 'elapsed_time'] + print_report), trigger=display_interval)
     trainer.extend(out_generated_image(gen, out_image_edge_num, out_image_edge_num,
-                                       out_image_folder, fixed_noise), trigger=(100, "iteration"))
+                                       out_image_folder, fixed_noise), trigger=(200, "iteration"))
     trainer.extend(extensions.ProgressBar(update_interval=10))
 
     # Run the training
@@ -235,7 +280,8 @@ def train(step=(5, 100),
 
 
 DATASET_LIST = ["mnist", "cifar"]
-GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer", "began"]
+GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer",
+            "began", "dragan", "improve_technique"]
 
 parser = argparse.ArgumentParser(
     description="This file is used to train model")
@@ -265,9 +311,20 @@ parser.add_argument(
 parser.add_argument(
     "--snapshot", help="falg to save snapshot", action="store_true")
 parser.add_argument("-g", "--gamma",
-                    help="ratio of discriminator's output of fake image and real image, used in began to control balanced learning between two nets.",
+                    help="ratio of discriminator's output of fake image and real image, used in began to control balanced learning between two nets(for began).",
                     type=float,
                     default=0.5)
+parser.add_argument("-pw", "--perturb_weight",
+                    help="weight to determine what range from real data to add gradient penalty (for dragan).",
+                    type=float,
+                    default=0.5)
+parser.add_argument("-nmd", "--no_minibatch_discrimination",
+                    help="flag not to use minibatch_discrimination.",
+                    action="store_true")
+parser.add_argument("-fm", "--feature_matching",
+                    help="flag to use feature_matching.",
+                    action="store_true")
+
 args = parser.parse_args()
 
 
@@ -293,6 +350,11 @@ def main():
 
     chainer.using_config("autotune", True)
     chainer.using_config("cudnn_deterministic", False)
+
+    use_techniques = {"minibatch_discrimination": args.no_minibatch_discrimination is False,
+                      "feature_matching":
+                      args.feature_matching}
+
     train(step=(5, 5),
           batch_size=args.batchsize,
           data_set=args.dataset,
@@ -304,7 +366,9 @@ def main():
           out_image_edge_num=int(math.sqrt(args.out_image_num)),
           is_cgan=args.cgan,
           gamma=args.gamma,
-          method=args.method)
+          perturb_weight=args.perturb_weight,
+          method=args.method,
+          techniques=use_techniques)
 
     end = time.time()
     print("whole process end in {} s".format(end - start))

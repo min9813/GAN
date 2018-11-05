@@ -108,36 +108,32 @@ class CifarGenerator(Chain):
 
 class CifarDiscriminator(Chain):
 
-    def __init__(self, wscale=0.02):
+    def __init__(self, wscale=0.02, ch=512):
         super(CifarDiscriminator, self).__init__()
         w = chainer.initializers.Normal(scale=wscale)
         with self.init_scope():
             # input=(32,32), output=(32, 32)
             self.conv1 = L.Convolution2D(
-                3, 32, ksize=3, stride=1, pad=0, initialW=w)
+                3, ch//8, ksize=3, stride=1, pad=1, initialW=w)
             self.conv2 = L.Convolution2D(
-                32, 64, ksize=2, stride=2, pad=0, initialW=w)
+                ch//8, ch//4, ksize=4, stride=2, pad=1, initialW=w)
             self.conv3 = L.Convolution2D(
-                64, 128, ksize=2, stride=2, pad=0, initialW=w)
+                ch//4, ch//2, ksize=4, stride=2, pad=1, initialW=w)
             self.conv4 = L.Convolution2D(
-                128, 256, ksize=2, stride=2, pad=0, initialW=w)
-            self.conv5 = L.Convolution2D(
-                256, 512, ksize=3, stride=1, pad=1, initialW=w)
+                ch//2, ch, ksize=4, stride=2, pad=1, initialW=w)
 
-            self.bn1 = L.BatchNormalization(32)
-            self.bn2 = L.BatchNormalization(64)
-            self.bn3 = L.BatchNormalization(128)
-            self.bn4 = L.BatchNormalization(256)
-            self.bn5 = L.BatchNormalization(512)
+            self.bn1 = L.BatchNormalization(ch//8)
+            self.bn2 = L.BatchNormalization(ch//4)
+            self.bn3 = L.BatchNormalization(ch//2)
+            self.bn4 = L.BatchNormalization(ch)
 
-            self.lout = L.Linear(None, 1)
+            self.lout = L.Linear(ch*4*4, 1)
 
     def __call__(self, x):
         h = F.leaky_relu(self.bn1(self.conv1(x)), slope=0.2)
         h = F.leaky_relu(self.bn2(self.conv2(h)), slope=0.2)
         h = F.leaky_relu(self.bn3(self.conv3(h)), slope=0.2)
-        h = F.leaky_relu(self.bn4(self.conv4(h)), slope=0.2)
-        h = self.bn5(self.conv5(h))
+        h = self.bn5(self.conv4(h))
         h = F.reshape(h, (x.shape[0], -1))
 
         return self.lout(h)

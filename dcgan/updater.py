@@ -14,24 +14,9 @@ class Updater(chainer.training.StandardUpdater):
         models = kwargs.pop("models")
         self.gen = models["gen"]
         self.dis = models["dis"]
+        self.n_dis = kwargs.pop("n_dis")
+        self.xp = self.gen.xp
         super(Updater, self).__init__(*args, **kwargs)
-
-    def loss_dis(self, dis, y_fake, y_real, xp):
-        batch_size = len(y_fake)
-        L1 = F.sigmoid_cross_entropy(y_real, Variable(
-            xp.ones(batch_size, dtype=xp.int32)).reshape(-1, 1))
-        L2 = F.sigmoid_cross_entropy(y_fake, Variable(
-            xp.zeros(batch_size, dtype=xp.int32)).reshape(-1, 1))
-        loss = 0.5 * (L1 + L2)
-        chainer.report({'loss': loss}, dis)
-        return loss
-
-    def loss_gen(self, gen, y_fake, xp):
-        batch_size = len(y_fake)
-        loss = F.sigmoid_cross_entropy(y_fake, Variable(
-            xp.ones(batch_size, dtype=xp.int32)).reshape(-1, 1))
-        chainer.report({'loss': loss}, gen)
-        return loss
 
     def update_core(self):
         gen_optimizer = self.get_optimizer('gen')
@@ -39,17 +24,30 @@ class Updater(chainer.training.StandardUpdater):
 
         batch = self.get_iterator('main').next()
         x_real = Variable(self.converter(batch, self.device))
-        xp = chainer.cuda.get_array_module(x_real.data)
-        gen, dis = self.gen, self.dis
         batchsize = len(batch)
+        z = self.gen.make_hidden(batchsize)
+        x_fake = self.gen(z)
+        y_real = self.dis(x_real)
+        y_fake = self.dis(x_fake)
 
-        y_real = dis(x_real)
-        z = gen.make_hidden(batchsize)
-        x_fake = gen(z)
-        y_fake = dis(x_fake)
+        loss_gen = F.sigmoid_cross_entropy(y_fake, Variable(
+            self.xp.ones_like(y_fake.data, dtype=self.xp.int32)))
+        self.gen.cleargrads()
+        loss_gen.backward()
+        gen_optimizer.update()
+        chainer.reporter.report({'gen/loss': loss_gen})
 
-        dis_optimizer.update(self.loss_dis, dis, y_fake, y_real, xp)
-        gen_optimizer.update(self.loss_gen, gen, y_fake, xp)
+        x_fake.unchain_backward()
+        L1 = F.sigmoid_cross_entropy(y_real, Variable(
+            self.xp.ones_like(y_real.data, dtype=self.xp.int32)))
+        L2 = F.sigmoid_cross_entropy(y_fake, Variable(
+            self.xp.zeros_like(y_fake.data, dtype=self.xp.int32)))
+        loss_dis = L1 + L2
+        self.dis.cleargrads()
+        loss_dis.backward()
+        dis_optimizer.update()
+
+        chainer.reporter.report({'dis/loss': loss_dis})
 
 
 class CGANUpdater(chainer.training.StandardUpdater):
@@ -58,6 +56,7 @@ class CGANUpdater(chainer.training.StandardUpdater):
         self.gen = models["gen"]
         self.dis = models["dis"]
         self.class_num = kwargs.pop("class_num")
+        self.n_dis = kwargs.pop("n_dis")
         self.xp = self.gen.xp
         super(CGANUpdater, self).__init__(*args, **kwargs)
 
