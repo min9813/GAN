@@ -9,10 +9,11 @@ import chainer.links as L
 
 class MnistMinibatchDiscriminator(Chain):
 
-    def __init__(self, output_dim=1, B=100, C=5):
+    def __init__(self, output_dim=1, B=100, C=5, use_feature_matching=True):
         # self.in_channel = in_channel
         self.B = B
         self.C = C
+        self.use_feature_matching = use_feature_matching
         w = chainer.initializers.Normal(scale=0.02)
         super(MnistMinibatchDiscriminator, self).__init__()
         with self.init_scope():
@@ -46,15 +47,19 @@ class MnistMinibatchDiscriminator(Chain):
         feature = F.sum(feature, axis=2) - 1
         h = F.concat([h, feature])
 
-        return self.lout(h)
+        if self.use_feature_matching:
+            return h, self.lout(h)
+        else:
+            return self.lout(h)
 
 
 class CifarMinibatchDiscriminator(Chain):
 
-    def __init__(self, wscale=0.02, ch=512, B=100, C=5, output_dim=1):
+    def __init__(self, wscale=0.02, ch=512, B=100, C=5, output_dim=1, use_feature_matching=True):
         super(CifarMinibatchDiscriminator, self).__init__()
         self.B = B
         self.C = C
+        self.use_feature_matching = use_feature_matching
         w = chainer.initializers.Normal(scale=wscale)
         with self.init_scope():
             # input=(32,32), output=(32, 32)
@@ -89,7 +94,10 @@ class CifarMinibatchDiscriminator(Chain):
         feature = F.exp(-F.sum(feature, axis=2))
         feature = F.sum(feature, axis=2) - 1
         h = F.concat([h, feature])
-        return self.lout(h)
+        if self.use_feature_matching:
+            return h, self.lout(h)
+        else:
+            return self.lout(h)
 
 
 class CifarDeepMinibatchDiscriminator(chainer.Chain):
@@ -109,8 +117,10 @@ class CifarDeepMinibatchDiscriminator(chainer.Chain):
             self.l4 = L.Linear(bottom_width * bottom_width *
                                ch, output_dim, initialW=w)
 
-            self.l_hidden = L.Linear(bottom_width * bottom_width * ch, B * C, initialW=w)
-            self.lout = L.Linear(bottom_width * bottom_width * ch + B, 1, initialW=w)
+            self.l_hidden = L.Linear(
+                bottom_width * bottom_width * ch, B * C, initialW=w)
+            self.lout = L.Linear(
+                bottom_width * bottom_width * ch + B, 1, initialW=w)
             self.bn0_1 = L.BatchNormalization(ch // 4, use_gamma=False)
             self.bn1_0 = L.BatchNormalization(ch // 4, use_gamma=False)
             self.bn1_1 = L.BatchNormalization(ch // 2, use_gamma=False)
@@ -127,11 +137,14 @@ class CifarDeepMinibatchDiscriminator(chainer.Chain):
         h = F.leaky_relu(self.bn2_0(self.c2_0(h)))
         h = F.leaky_relu(self.bn2_1(self.c2_1(h)))
         h = F.reshape(F.leaky_relu(self.c3_0(h)), (N, 8192))
+        h = self.minibatch_discriminate(h, N)
+        return self.lout(h)
+
+    def minibatch_discriminate(self, h, N):
         feature = F.reshape(self.l_hidden(h), (N, self.B, self.C, 1))
         feature = F.broadcast_to(feature, (N, self.B, self.C, N))
         feature_batch = F.transpose(feature, (3, 1, 2, 0))
         feature = F.absolute(feature - feature_batch)
         feature = F.exp(-F.sum(feature, axis=2))
         feature = F.sum(feature, axis=2) - 1
-        h = F.concat([h, feature])
-        return self.lout(h)
+        return F.concat([h, feature])

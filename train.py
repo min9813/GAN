@@ -20,7 +20,7 @@ GRADIENT_PENALTY_WEIGHT = 10
 
 
 def train(step=(5, 100),
-          data_set="cifar",
+          data_set='cifar10',
           debug=True,
           n_hidden=128,
           batch_size=128,
@@ -46,7 +46,7 @@ def train(step=(5, 100),
     updater_args = {"n_dis": step,
                     "device": 0}
 
-    if data_set == "cifar":
+    if data_set == 'cifar10':
         print("use cifar dataset")
         # ndim=3 : (ch,width,height)
         train = dataset.Cifar10Dataset(is_need_conditional=is_cgan)
@@ -65,11 +65,11 @@ def train(step=(5, 100),
         train_iter = chainer.iterators.SerialIterator(train, batch_size)
     else:
         sys.exit("data_set argument must be next argument [{}]".format(
-            "'cifar','mnist','toy'"))
+            "'cifar10','mnist','toy'"))
 
     # Setup an optimizer
     def make_optimizer(model, **params):
-        if method in ("dcgan"):
+        if method == "dcgan":
             # parametor require 'alpha','beta1','beta2'
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"])
@@ -83,7 +83,7 @@ def train(step=(5, 100),
                 optimizer.add_hook(WeightClipping(params["clip"]))
             except KeyError:
                 pass
-        elif method in ("wgangp", "began", "cramer", "dragan", "improve_technique"):
+        elif method in ("sngan", "wgangp", "began", "cramer", "dragan", "improve_technique"):
             optimizer = chainer.optimizers.Adam(
                 alpha=params["alpha"], beta1=params["beta1"], beta2=params["beta2"])
             optimizer.setup(model)
@@ -96,7 +96,7 @@ def train(step=(5, 100),
         if data_set == "mnist":
             gen = common.net.Generator(n_hidden)
             dis = common.net.Discriminator()
-        elif data_set == 'cifar':
+        elif data_set == 'cifar10':
             gen = common.net.CifarGenerator(n_hidden)
             dis = common.net.CifarDiscriminator()
         else:
@@ -113,7 +113,7 @@ def train(step=(5, 100),
         if data_set == "mnist":
             gen = common.net.Generator(n_hidden)
             dis = common.net.Discriminator()
-        elif data_set == 'cifar':
+        elif data_set == 'cifar10':
             gen = common.net.CifarGenerator(n_hidden)
             dis = common.net.CifarDiscriminator()
         else:
@@ -129,7 +129,7 @@ def train(step=(5, 100),
         if data_set == "mnist":
             gen = common.net.Generator(n_hidden)
             dis = common.net.Discriminator()
-        elif data_set == 'cifar':
+        elif data_set == 'cifar10':
             gen = common.net.CifarGenerator(n_hidden)
             dis = common.net.WGANDiscriminator()
         else:
@@ -143,31 +143,13 @@ def train(step=(5, 100),
 
         plot_report = ["gen/loss", 'wasserstein distance']
         print_report = plot_report + ["critic/loss_grad", "critic/loss"]
-    elif method == "wgangp":
-        if data_set == "mnist":
-            gen = common.net.Generator(n_hidden)
-            dis = common.net.Discriminator(output_dim=256)
-        elif data_set == 'cifar':
-            gen = common.net.CifarGenerator(n_hidden)
-            dis = common.net.WGANDiscriminator(output_dim=256)
-        else:
-            gen = common.net.FCGenerator(n_hidden)
-            dis = common.net.FCDiscriminator(output_dim=64)
-        from cramer.updater import Updater, CGANUpdater
-        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
-        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
-
-        updater_args["gradient_penalty_weight"] = GRADIENT_PENALTY_WEIGHT
-
-        plot_report = ["gen/loss", 'cramer distance']
-        print_report = plot_report + ["critic/loss_grad", "critic/loss"]
     elif method == "began":
         import began
         from began.updater import Updater
         if data_set == "mnist":
             gen = began.net.MnistGenerator(n_hidden)
             dis = began.net.MnistDiscriminator()
-        elif data_set == 'cifar':
+        elif data_set == 'cifar10':
             gen = began.net.CifarGenerator(n_hidden)
             dis = began.net.CifarDiscriminator()
         updater_args["gamma"] = gamma
@@ -181,7 +163,7 @@ def train(step=(5, 100),
         if data_set == "mnist":
             gen = common.net.Generator(n_hidden)
             dis = common.net.Discriminator()
-        elif data_set == 'cifar':
+        elif data_set == 'cifar10':
             gen = common.net.CifarGenerator(n_hidden)
             dis = common.net.WGANDiscriminator()
         updater_args["gradient_penalty_weight"] = GRADIENT_PENALTY_WEIGHT
@@ -191,25 +173,18 @@ def train(step=(5, 100),
         plot_report = ["gen/loss", 'dis/loss']
         print_report = plot_report + ["dis/loss_grad"]
     elif method == "improve_technique":
-        print("use next technique:")
+        import improve_technique.net
         if data_set == "mnist":
             gen = common.net.Generator(n_hidden)
-            dis = common.net.Discriminator()
-        elif data_set == 'cifar':
-            gen = common.net.CifarGenerator(n_hidden)
-            dis = common.net.CifarDiscriminator()
+            dis = improve_technique.net.MnistMinibatchDiscriminator(use_feature_matching=techniques["feature_matching"])
+        elif data_set == 'cifar10':
+            gen = common.net.Discriminator(n_hidden)
+            dis = improve_technique.net.CifarDeepMinibatchDiscriminator(use_feature_matching=techniques["feature_matching"])
         else:
             raise NotImplementedError
-        if techniques["minibatch_discrimination"]:
-            print("**minibatch discrimination**")
-            import improve_technique.net
-            if data_set == "mnist":
-                dis = improve_technique.net.MnistMinibatchDiscriminator()
-            elif data_set == 'cifar':
-                dis = improve_technique.net.CifarDeepMinibatchDiscriminator()
         if techniques["feature_matching"]:
             print("**feature matching**")
-            from improved_technique.updater import Updater
+            from improve_technique.updater import Updater
             plot_report = ['dis/loss', "gen/loss", "gen/loss_feature"]
             print_report = plot_report
         else:
@@ -218,6 +193,20 @@ def train(step=(5, 100),
             print_report = plot_report
         opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
         opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
+    elif method == "sngan":
+        from sngan.updater import Updater
+        if data_set == "mnist":
+            gen = common.net.Generator(n_hidden)
+            dis = common.net.SNMnistDiscriminator()
+        elif data_set == 'cifar10':
+            gen = common.net.CifarGenerator(n_hidden)
+            dis = common.net.SNCifarDiscriminator()
+        else:
+            raise NotImplementedError
+        opt_gen = make_optimizer(gen, alpha=0.0002, beta1=0, beta2=0.9)
+        opt_dis = make_optimizer(dis, alpha=0.0002, beta1=0, beta2=0.9)
+        plot_report = ["gen/loss", 'dis/loss']
+        print_report = plot_report
 
     else:
         raise NotImplementedError
@@ -243,9 +232,8 @@ def train(step=(5, 100),
             [fixed_noise, one_hot_label], axis=1).astype("f")
         print(fixed_noise.shape)
 
-    else:
-        updater = Updater(**updater_args)
-        # Set up a trainer
+    updater = Updater(**updater_args)
+    # Set up a trainer
     trainer = training.Trainer(updater, stop_trigger=max_time, out=out_folder)
 
     # epoch_interval = (1, 'epoch')
@@ -279,12 +267,12 @@ def train(step=(5, 100),
     trainer.run()
 
 
-DATASET_LIST = ["mnist", "cifar"]
+DATASET_LIST = ["mnist", 'cifar10']
 GAN_LIST = ["wgangp", "wgan", "dcgan", "cramer",
-            "began", "dragan", "improve_technique"]
+            "began", "dragan", "improve_technique", "sngan"]
 
 parser = argparse.ArgumentParser(
-    description="This file is used to train model")
+    description="This file is used to train gan model")
 parser.add_argument("-d", "--dataset",
                     help="what dataset to generate",
                     choices=DATASET_LIST,
@@ -295,21 +283,22 @@ parser.add_argument("-b", "--batchsize",
 parser.add_argument("-me", "--max_epoch",
                     help="max epoch time", type=int, default=100)
 parser.add_argument("-mi", "--max_iteration",
-                    help="max iteration time", type=int, default=100)
+                    help="max iteration time", type=int, default=1000)
 parser.add_argument("-f", "--output_dir_name",
-                    help="file to output the training data", type=str, default="TEST")
+                    help="file to output the training data", default="TEST")
 parser.add_argument("-l", "--latent_dim",
                     help="dimenstion of latent variable", type=int, default=128)
 parser.add_argument("-m", "--method",
-                    help="method to create image", choices=GAN_LIST, default="wgangp")
+                    help="method to create image", choices=GAN_LIST, default="sngan")
 parser.add_argument("-ndb", "--no_debug",
                     help="flag if not debug, default is False", action="store_true")
 parser.add_argument("-ow", "--out_image_num",
-                    help="number of output image", type=int, default=100)
+                    help="number of output image", type=int, default=49)
 parser.add_argument(
     "--cgan", help="falg to use conditional information", action="store_true")
 parser.add_argument(
     "--snapshot", help="falg to save snapshot", action="store_true")
+
 parser.add_argument("-g", "--gamma",
                     help="ratio of discriminator's output of fake image and real image, used in began to control balanced learning between two nets(for began).",
                     type=float,
@@ -347,9 +336,6 @@ def main():
 
     assert args.gamma > 0 and args.gamma < 1, print(
         "argument 'gamma' must be between [0,1]")
-
-    chainer.using_config("autotune", True)
-    chainer.using_config("cudnn_deterministic", False)
 
     use_techniques = {"minibatch_discrimination": args.no_minibatch_discrimination is False,
                       "feature_matching":

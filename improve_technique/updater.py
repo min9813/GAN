@@ -28,12 +28,12 @@ class Updater(chainer.training.StandardUpdater):
         batchsize = len(batch)
         z = self.gen.make_hidden(batchsize)
         x_fake = self.gen(z)
-        y_real = self.dis(x_real)
-        y_fake = self.dis(x_fake)
+        real_feature, y_real = self.dis(x_real)
+        fake_feature, y_fake = self.dis(x_fake)
 
         loss_gen = F.sigmoid_cross_entropy(y_fake, Variable(
             self.xp.ones_like(y_fake.data, dtype=self.xp.int32)))
-        loss_feature = F.mean_squared_error(y_fake, y_real.data)
+        loss_feature = F.mean_squared_error(real_feature, fake_feature)
         self.gen.cleargrads()
         loss_gen.backward()
         loss_feature.backward()

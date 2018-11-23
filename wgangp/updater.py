@@ -15,13 +15,13 @@ class Updater(chainer.training.StandardUpdater):
         models = kwargs.pop("models")
         self.gen = models["gen"]
         self.dis = models["dis"]
-        self.n_dis, self.change_step = kwargs.pop("step")
+        self.n_dis, self.change_step = kwargs.pop("n_dis")
         self.lam = kwargs.pop("gradient_penalty_weight")
         super(Updater, self).__init__(*args, **kwargs)
 
     def update_core(self):
         gen_optimizer = self.get_optimizer('gen')
-        dis_optimizer = self.get_optimizer('critic')
+        dis_optimizer = self.get_optimizer('dis')
         xp = self.gen.xp
 
         for i in range(self.n_dis):

@@ -5,7 +5,7 @@
 
 ##### 使い方
 - train.pyに-m引数で使うGANの種類を選べます。
-- 現在使えるGANはdcgan、wgan、wgan-gp、cramer-gan, be-gan, minibatch discrimination, feature matching, concidtional-ganです。
+- 現在使えるGANはdcgan、wgan、wgan-gp、cramer-gan, be-gan, sn-gan, minibatch discrimination, feature matching, concidtional-ganです。
 
 ##### 全体的な気づき
 - データは-1~1にリスケールさせる。これでハマった。
@@ -75,6 +75,11 @@ import hoge.fuga
 -  cgan なし
 - 実データの近傍付近に関する勾配のみ制限する、の理解ができた。
 - 他と比べて綺麗なのかどうかはよくわからない。
+
+##### snganについて
+- cgan なし、実装予定
+- 実行速度がwgan-gpの1.5倍くらいになった。
+- 自分用のリンクの作り方が少しわかった。
 
 ##### improve techniqueについて
 - minibatch_discrimination の実装が頭こんがらがった。[PFNの実装](https://github.com/pfnet-research/chainer-gan-lib)よりもreshapeをひとつ減らしています。

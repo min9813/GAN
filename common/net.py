@@ -5,6 +5,9 @@ import chainer
 from chainer import Chain
 import chainer.functions as F
 import chainer.links as L
+from common.sn.sn_convolution_2d import SNConvolution2D
+from common.sn.sn_linear import SNLinear
+
 
 
 class Generator(Chain):
@@ -66,6 +69,27 @@ class Discriminator(Chain):
         h = F.reshape(h, (x.shape[0], -1))
 
         return self.lout(h)
+
+
+class SNMnistDiscriminator(Chain):
+
+    def __init__(self, output_dim=1, wscale=0.02, ch=512, bottom_width=4):
+        w = chainer.initializers.Normal(wscale)
+        super(SNMnistDiscriminator, self).__init__()
+        with self.init_scope():
+            self.c0 = SNConvolution2D(1, ch//4, ksize=4, stride=2, pad=1, initialW=w)
+            self.c1 = SNConvolution2D(ch//4, ch//2, ksize=4, stride=2, pad=2, initialW=w)
+            self.c2 = SNConvolution2D(ch//2, ch, ksize=4, stride=2, pad=1, initialW=w)
+
+            self.lout = SNLinear(bottom_width*bottom_width*ch, output_dim, initialW=w)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.c0(x))
+        h = F.leaky_relu(self.c1(h))
+        h = F.leaky_relu(self.c2(h))
+        h = self.lout(h)
+
+        return h
 
 
 class CifarGenerator(Chain):
@@ -163,6 +187,29 @@ class WGANDiscriminator(chainer.Chain):
         h = F.leaky_relu(self.c3(h))
         h = F.leaky_relu(self.c3_0(h))
         return self.l4(h)
+
+
+class SNCifarDiscriminator(Chain):
+
+    def __init__(self, output_dim=1, wscale=0.02, ch=512, bottom_width=4):
+        w = chainer.initializers.Normal(wscale)
+        super(SNCifarDiscriminator, self).__init__()
+        with self.init_scope():
+            self.c0 = SNConvolution2D(3, ch//8, ksize=3, stride=1, pad=1, initialW=w)
+            self.c1 = SNConvolution2D(ch//8, ch//4, ksize=4, stride=2, pad=1, initialW=w)
+            self.c2 = SNConvolution2D(ch//4, ch//2, ksize=4, stride=2, pad=1, initialW=w)
+            self.c3 = SNConvolution2D(ch//2, ch, ksize=4, stride=2, pad=1, initialW=w)
+
+            self.lout = SNLinear(bottom_width*bottom_width*ch, output_dim, initialW=w)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.c0(x))
+        h = F.leaky_relu(self.c1(h))
+        h = F.leaky_relu(self.c2(h))
+        h = F.leaky_relu(self.c3(h))
+        h = self.lout(h)
+
+        return h
 
 
 class FCGenerator(Chain):
